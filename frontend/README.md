@@ -49,11 +49,11 @@ pnpm build    # 프로덕션 빌드 (tsc -b && vite build)
 src/
 ├── pages/          # 랜딩·목록·상세·로그인
 ├── components/     # GlobalNav, PropertyCard, PropertyFilterBar + shadcn/ui
-├── context/        # AuthContext(인증 스텁), ThemeContext(다크모드)
+├── context/        # AuthContext(인증 스텁)
 ├── data/           # 매물 목데이터 15건
 └── lib/            # 가격·평수 포맷 유틸
 docs/frontend-spec.md   # 기능 명세서
-design.pen              # Pencil 디자인 파일 (라이트/다크 시안, 컴포넌트 보드)
+design.pen              # Pencil 디자인 파일 (라이트 시안, 컴포넌트 보드)
 ```
 
 ## 디자인 원칙

@@ -3,7 +3,6 @@ import { Route, Routes, useNavigate, useParams } from "react-router-dom";
 
 import GlobalNav from "@/components/GlobalNav";
 import { AuthProvider } from "@/context/AuthContext";
-import { ThemeProvider } from "@/context/ThemeContext";
 import LandingPage from "@/pages/LandingPage";
 import LoginPage from "@/pages/LoginPage";
 import PropertyDetailPage from "@/pages/PropertyDetailPage";
@@ -99,38 +98,36 @@ function App() {
   };
 
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <GlobalNav />
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/properties"
-            element={
-              <PropertyListPage
-                loading={loading}
-                properties={properties}
-                onToggleSave={toggleSave}
-                onOpen={(id) => navigate(`/properties/${id}`)}
-              />
-            }
-          />
-          <Route
-            path="/properties/:id"
-            element={
-              <DetailRoute
-                loading={loading}
-                properties={properties}
-                memos={memos}
-                onToggleSave={toggleSave}
-                memoActions={memoActions}
-              />
-            }
-          />
-        </Routes>
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <GlobalNav />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/properties"
+          element={
+            <PropertyListPage
+              loading={loading}
+              properties={properties}
+              onToggleSave={toggleSave}
+              onOpen={(id) => navigate(`/properties/${id}`)}
+            />
+          }
+        />
+        <Route
+          path="/properties/:id"
+          element={
+            <DetailRoute
+              loading={loading}
+              properties={properties}
+              memos={memos}
+              onToggleSave={toggleSave}
+              memoActions={memoActions}
+            />
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }
 

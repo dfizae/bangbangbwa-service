@@ -16,8 +16,8 @@
 - UI 컴포넌트는 shadcn/ui를 우선 사용 (Button, Card, Badge, Input, Select, Dialog, Tabs)
 - shadcn/ui에 없는 것만 직접 구현하고, 스타일은 Tailwind 유틸리티만 사용
 - 컬러: primary는 블루 계열(신뢰 톤), 텍스트·서피스는 slate 계열. CSS 변수(테마)로 정의
-  - 라이트(배경 화이트)가 기본, 다크(slate-900 배경)는 GNB 토글로 전환 (ThemeContext + `.dark` 클래스)
-  - 색상 추가·변경 시 index.css의 `:root`와 `.dark` 블록 양쪽에 정의할 것
+  - 라이트(배경 화이트) 전용 — 다크 모드는 사용하지 않음(팀 협의로 제거). 테마 토글·`.dark` 블록 없음
+  - 색상 추가·변경 시 index.css의 `:root` 블록에 정의할 것
 - 폰트: IBM Plex Sans KR (index.html Google Fonts 로드, `--font-sans`) — design.pen과 동일. 한글 블록에는 word-break: keep-all 유지
 - 타이포: 제목 font-semibold, 본문 font-normal, 크기 단계는 text-sm/base/lg/xl/2xl만 사용 (랜딩 히어로·섹션 제목은 예외)
 - 간격은 4px 그리드(p-2/4/6/8), 카드 radius는 rounded-xl, 그림자는 shadow-sm까지만

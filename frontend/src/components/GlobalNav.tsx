@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LogOut, Menu, Moon, Sun, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
 import { cn } from "@/lib/utils";
 
 interface NavItemConfig {
@@ -103,22 +102,6 @@ function AuthArea({
   );
 }
 
-// 라이트/다크 전환 토글
-function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      aria-label={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"}
-      onClick={toggleTheme}
-    >
-      {theme === "dark" ? <Sun /> : <Moon />}
-    </Button>
-  );
-}
-
 // 공통 GNB — App 레이아웃 레벨에서 모든 페이지 상단에 표시 (h-14 고정)
 function GlobalNav() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -147,17 +130,13 @@ function GlobalNav() {
         </div>
 
         <div className="ml-auto hidden items-center gap-1 sm:flex">
-          <ThemeToggle />
           <AuthArea />
         </div>
 
-        <div className="ml-auto flex items-center gap-1 sm:hidden">
-          <ThemeToggle />
-        </div>
         <Button
           variant="ghost"
           size="icon"
-          className="sm:hidden"
+          className="ml-auto sm:hidden"
           aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((v) => !v)}
