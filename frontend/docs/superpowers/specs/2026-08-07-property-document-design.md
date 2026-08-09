@@ -19,7 +19,7 @@ Swagger(`http://i15a504.p.ssafy.io:8081/v3/api-docs`) 2026-08-07 기준, 태그 
 | GET | `/api/properties/{propertyId}/documents` | — | `DocumentSummaryResponse[]` |
 | PUT | `/api/properties/{propertyId}/documents/{documentId}` | multipart `file` | `DocumentResponse` |
 | DELETE | `/api/properties/{propertyId}/documents/{documentId}` | — | `void` |
-| GET | `/api/properties/{propertyId}/documents/{documentId}/download` | — | PDF 바이너리 |
+| GET | `/api/properties/{propertyId}/documents/download` | — | 서류 전체를 합친 PDF 바이너리 |
 
 ### 스키마
 
@@ -85,7 +85,7 @@ getPropertyDocuments(propertyId, signal): Promise<PropertyDocument[]>
 registerPropertyDocument(propertyId, documentType, file): Promise<PropertyDocument>
 replacePropertyDocument(propertyId, documentId, file): Promise<PropertyDocument>
 deletePropertyDocument(propertyId, documentId): Promise<void>
-downloadPropertyDocument(propertyId, documentId): Promise<{ blob, fileName? }>
+downloadPropertyDocuments(propertyId): Promise<{ blob, fileName? }>
 ```
 
 `documentType`은 한글 value를 그대로 쿼리 파라미터로 보낸다. 등록·교체 응답(`DocumentResponse`)에는 `riskLevel`·`summary`·`downloadable`이 없으므로 `downloadable: false`로 채워 `PropertyDocument`로 맞춘다 — 등록 직후는 항상 `PROCESSING`이라 사실과 일치한다.
@@ -102,7 +102,7 @@ propertyDocumentKeys = {
 
 `propertyDocumentListOptions(propertyId)`의 `refetchInterval`을 함수로 준다. 목록에 `PROCESSING`이 하나라도 있으면 `5_000`, 아니면 `false`. 분석이 끝나면 폴링이 스스로 멈춘다.
 
-훅: `usePropertyDocuments(propertyId, enabled)`, `useRegisterPropertyDocument`, `useReplacePropertyDocument`, `useDeletePropertyDocument`, `useDownloadPropertyDocument`.
+훅: `usePropertyDocuments(propertyId, enabled)`, `useRegisterPropertyDocument`, `useReplacePropertyDocument`, `useDeletePropertyDocument`, `useDownloadPropertyDocuments`.
 
 - 변경 훅은 성공 시 `propertyDocumentKeys.list(propertyId)`를 무효화한다. 낙관적 업데이트는 하지 않는다 — 분석 결과는 서버만 알고, 목록이 두 줄이라 체감 지연이 없다
 - 다운로드는 `useMutation`으로 두어 `isPending`으로 중복 클릭을 막는다
@@ -156,14 +156,16 @@ propertyDocumentKeys = {
 
 - **비로그인**: 요청을 보내지 않고(`enabled: false`) "로그인하면 AI 서류 분석 결과를 확인할 수 있어요" + 로그인 버튼. 401로 로컬 토큰이 지워지는 부작용도 함께 피한다
 - **로그인**: 두 슬롯을 항상 렌더
-  - `COMPLETED` — 위험도 배지 + `summary` + `분석 PDF 받기` 버튼(`downloadable` 기준)
+  - `COMPLETED` — 위험도 배지 + `summary`
   - `PROCESSING` — "AI가 서류를 분석하고 있어요" + 5초 폴링. 영역에 `aria-live="polite"`를 걸어 완료 시 보조기술에도 전달
   - `FAILED` — "분석에 실패했어요". 중개사에게는 매물 수정에서 교체하라고 안내
   - 미등록 — "등록된 서류가 없어요". 중개사에게는 매물 수정 링크
 - **조회 실패**: 섹션 안에만 재시도 버튼을 두고 페이지 전체는 막지 않는다
 - **다운로드 실패**: 섹션 안에 `role="alert"` 문구, 버튼은 그대로 두어 재시도 가능
 
-다운로드 파일명은 `Content-Disposition`을 우선하고, 없으면 `{매물명}_{서류종류}_분석.pdf`로 만든다. 매물명은 `PropertyDetailPage`가 이미 가진 값을 prop으로 내려준다.
+분석 PDF는 서류 전체가 합쳐진 한 파일이라 버튼도 섹션 하단에 하나만 둔다. 두 서류가 모두 `downloadable`일 때만 활성화하고, 비활성 상태에서는 "두 서류의 분석이 모두 끝나면 받을 수 있어요"로 이유를 함께 알린다.
+
+다운로드 파일명은 `Content-Disposition`을 우선하고, 없으면 `{매물명}_서류분석.pdf`로 만든다. 매물명은 `PropertyDetailPage`가 이미 가진 값을 prop으로 내려준다.
 
 ## 검증
 

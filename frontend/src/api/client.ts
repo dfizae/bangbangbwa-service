@@ -145,7 +145,7 @@ export const api = {
    * @throws {ApiError} 실패 응답은 Blob 본문을 JSON으로 풀어 메시지를 담는다
    * @example
    * const { blob, fileName } = await api.getBlob({
-   *   path: `/api/properties/${propertyId}/documents/${documentId}/download`,
+   *   path: `/api/properties/${propertyId}/documents/download`,
    * });
    */
   getBlob: ({

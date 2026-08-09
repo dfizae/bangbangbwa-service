@@ -7,7 +7,7 @@ import {
 
 import {
   deletePropertyDocument,
-  downloadPropertyDocument,
+  downloadPropertyDocuments,
   getPropertyDocuments,
   registerPropertyDocument,
   replacePropertyDocument,
@@ -100,21 +100,16 @@ export function useDeletePropertyDocument() {
 }
 
 // 파일 저장까지가 한 동작이라 mutation으로 둔다 — isPending으로 중복 클릭을 막는다
-export function useDownloadPropertyDocument() {
+export function useDownloadPropertyDocuments() {
   return useMutation({
     mutationFn: async ({
       propertyId,
-      documentId,
       fallbackFileName,
     }: {
       propertyId: number;
-      documentId: number;
       fallbackFileName: string;
     }) => {
-      const { blob, fileName } = await downloadPropertyDocument(
-        propertyId,
-        documentId,
-      );
+      const { blob, fileName } = await downloadPropertyDocuments(propertyId);
       saveBlobAsFile(blob, fileName ?? fallbackFileName);
     },
   });

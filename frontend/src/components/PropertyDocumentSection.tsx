@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  useDownloadPropertyDocument,
+  useDownloadPropertyDocuments,
   usePropertyDocuments,
 } from "@/hooks/queries/propertyDocumentQueries";
 import {
@@ -54,21 +54,13 @@ function DocumentSlot({
   documentType,
   document,
   propertyId,
-  propertyTitle,
   canManage,
 }: {
   documentType: DocumentType;
   document?: PropertyDocument;
   propertyId: number;
-  propertyTitle: string;
   canManage: boolean;
 }) {
-  const {
-    mutate: download,
-    isPending: isDownloading,
-    isError: isDownloadError,
-  } = useDownloadPropertyDocument();
-
   return (
     <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 gap-3">
@@ -90,40 +82,16 @@ function DocumentSlot({
           <p aria-live="polite" className="mt-1 text-sm text-muted-foreground">
             {describeDocument(document, canManage)}
           </p>
-          {isDownloadError && (
-            <p role="alert" className="mt-1 text-xs text-destructive">
-              분석 PDF를 받지 못했어요. 잠시 후 다시 시도해 주세요
-            </p>
-          )}
         </div>
       </div>
 
-      <div className="shrink-0">
-        {document?.downloadable ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isDownloading}
-            onClick={() =>
-              download({
-                propertyId,
-                documentId: document.documentId,
-                fallbackFileName: `${propertyTitle}_${documentType}_분석.pdf`,
-              })
-            }
-          >
-            <Download />
-            {isDownloading ? "받는 중..." : "분석 PDF"}
+      {!document && canManage && (
+        <div className="shrink-0">
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/properties/${propertyId}/edit`}>서류 등록</Link>
           </Button>
-        ) : (
-          !document &&
-          canManage && (
-            <Button asChild variant="outline" size="sm">
-              <Link to={`/properties/${propertyId}/edit`}>서류 등록</Link>
-            </Button>
-          )
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -150,6 +118,11 @@ function PropertyDocumentSection({
     isError,
     refetch,
   } = usePropertyDocuments(propertyId, isLoggedIn);
+  const {
+    mutate: download,
+    isPending: isDownloading,
+    isError: isDownloadError,
+  } = useDownloadPropertyDocuments();
 
   if (!isLoggedIn) {
     return (
@@ -191,6 +164,11 @@ function PropertyDocumentSection({
     );
   }
 
+  // 분석 PDF는 서류 전체를 합친 한 파일이라 두 서류가 모두 분석을 마쳐야 받을 수 있다
+  const canDownload =
+    documents.length === DOCUMENT_TYPES.length &&
+    documents.every((document) => document.downloadable);
+
   return (
     <SectionCard>
       {DOCUMENT_TYPES.map((documentType) => (
@@ -201,10 +179,38 @@ function PropertyDocumentSection({
             (document) => document.documentType === documentType,
           )}
           propertyId={propertyId}
-          propertyTitle={propertyTitle}
           canManage={canManage}
         />
       ))}
+
+      <div className="flex flex-col gap-2 border-t pt-3">
+        {isDownloadError && (
+          <p role="alert" className="text-xs text-destructive">
+            분석 PDF를 받지 못했어요. 잠시 후 다시 시도해 주세요
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            {canDownload
+              ? "두 서류의 분석 결과를 한 파일로 받을 수 있어요"
+              : "두 서류의 분석이 모두 끝나면 받을 수 있어요"}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!canDownload || isDownloading}
+            onClick={() =>
+              download({
+                propertyId,
+                fallbackFileName: `${propertyTitle}_서류분석.pdf`,
+              })
+            }
+          >
+            <Download />
+            {isDownloading ? "받는 중..." : "분석 PDF"}
+          </Button>
+        </div>
+      </div>
     </SectionCard>
   );
 }

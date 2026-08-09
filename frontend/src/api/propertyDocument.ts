@@ -100,12 +100,7 @@ export function deletePropertyDocument(
   });
 }
 
-// 분석 완료(downloadable) 서류만 받을 수 있다. 인증이 필요한 바이너리라 api.getBlob을 쓴다
-export function downloadPropertyDocument(
-  propertyId: number,
-  documentId: number,
-) {
-  return api.getBlob({
-    path: `${documentsPath(propertyId)}/${documentId}/download`,
-  });
+// 매물의 서류 분석 결과를 한 파일로 받는다. 인증이 필요한 바이너리라 api.getBlob을 쓴다
+export function downloadPropertyDocuments(propertyId: number) {
+  return api.getBlob({ path: `${documentsPath(propertyId)}/download` });
 }
