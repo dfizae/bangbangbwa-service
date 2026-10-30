@@ -1,0 +1,261 @@
+package com.backend.bangbangbwa.domain.document.service;
+
+import com.backend.bangbangbwa.common.exception.CustomException;
+import com.backend.bangbangbwa.common.exception.ErrorCode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Component;
+
+import java.io.ByteArrayOutputStream;
+
+/**
+ * 서류 AI 분석 결과(위험도·요약·근거)를 HTML로 렌더링한 뒤 PDF 바이트로 변환합니다.
+ * 업로드된 원본 서류가 아니라, 우리가 분석해 정리한 리포트를 제공합니다.
+ */
+@Slf4j
+@Component
+public class DocumentPdfGenerator {
+
+    private static final String FONT_PATH = "fonts/NanumGothic-Regular.ttf";
+    private static final String FONT_FAMILY = "DocumentFont";
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public byte[] generate(
+            Long documentId,
+            String documentType,
+            String riskLevel,
+            String summary,
+            String resultJson
+    ) {
+        String html = buildHtml(documentType, riskLevel, summary, resultJson);
+
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            PdfRendererBuilder builder = new PdfRendererBuilder();
+            builder.useFastMode();
+            registerKoreanFont(builder);
+            builder.withHtmlContent(html, null);
+            builder.toStream(outputStream);
+            builder.run();
+
+            return outputStream.toByteArray();
+        } catch (Exception exception) {
+            log.error(
+                    "서류 분석 PDF 생성에 실패했습니다. documentId={}",
+                    documentId,
+                    exception
+            );
+            throw new CustomException(ErrorCode.PDF_GENERATION_FAILED);
+        }
+    }
+
+    private void registerKoreanFont(PdfRendererBuilder builder) {
+        ClassPathResource fontResource = new ClassPathResource(FONT_PATH);
+        if (!fontResource.exists()) {
+            log.warn("한글 폰트({})를 찾을 수 없어 기본 폰트로 렌더링합니다.", FONT_PATH);
+            return;
+        }
+        builder.useFont(
+                () -> {
+                    try {
+                        return fontResource.getInputStream();
+                    } catch (Exception exception) {
+                        throw new CustomException(ErrorCode.PDF_GENERATION_FAILED);
+                    }
+                },
+                FONT_FAMILY
+        );
+    }
+
+    private String buildHtml(
+            String documentType,
+            String riskLevel,
+            String summary,
+            String resultJson
+    ) {
+        StringBuilder body = new StringBuilder();
+
+        body.append("<h1>서류 분석 리포트</h1>");
+        body.append("<div class=\"meta\">");
+        body.append(row("서류 종류", escape(documentType)));
+        body.append(row("위험도", riskBadge(riskLevel)));
+        body.append("</div>");
+
+        body.append("<h2>요약</h2>");
+        body.append("<p>").append(escape(nullToDash(summary))).append("</p>");
+
+        JsonNode root = parse(resultJson);
+        if (root != null) {
+            appendFindings(body, root);
+            appendRegisterDetails(body, root);
+            appendReasons(body, root);
+        }
+
+        body.append("<p class=\"disclaimer\">본 리포트는 AI가 자동 분석한 참고 자료이며, "
+                + "법적 효력을 갖지 않습니다. 정확한 권리관계는 원본 서류와 전문가 확인이 필요합니다.</p>");
+
+        return """
+                <html>
+                <head>
+                <style>
+                @page { size: A4; margin: 28px; }
+                body { font-family: "%s", sans-serif; font-size: 12px; color: #222; }
+                h1 { font-size: 20px; }
+                h2 { font-size: 15px; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 20px; }
+                .meta { margin-top: 8px; }
+                .meta .item { margin: 2px 0; }
+                .label { display: inline-block; width: 80px; color: #666; }
+                table { width: 100%%; border-collapse: collapse; margin-top: 8px; }
+                th, td { border: 1px solid #ddd; padding: 6px; text-align: left; vertical-align: top; }
+                th { background: #f5f5f5; }
+                .badge { padding: 1px 8px; border-radius: 4px; color: #fff; font-weight: bold; }
+                .risk-danger { background: #d32f2f; }
+                .risk-caution { background: #f57c00; }
+                .risk-safe { background: #388e3c; }
+                .risk-none { background: #888; }
+                ul { margin: 6px 0; padding-left: 18px; }
+                .disclaimer { margin-top: 24px; font-size: 10px; color: #888; }
+                </style>
+                </head>
+                <body>%s</body>
+                </html>
+                """.formatted(FONT_FAMILY, body);
+    }
+
+    private void appendFindings(StringBuilder body, JsonNode root) {
+        JsonNode findings = root.get("findings");
+        if (findings == null || !findings.isArray() || findings.isEmpty()) {
+            return;
+        }
+        body.append("<h2>조항별 검토</h2>");
+        body.append("<table><tr><th>조항</th><th>문제점</th><th>위험도</th><th>근거</th></tr>");
+        for (JsonNode finding : findings) {
+            body.append("<tr>")
+                    .append("<td>").append(escape(text(finding, "clause"))).append("</td>")
+                    .append("<td>").append(escape(text(finding, "issue"))).append("</td>")
+                    .append("<td>").append(riskBadge(text(finding, "riskLevel"))).append("</td>")
+                    .append("<td>").append(escape(text(finding, "reason"))).append("</td>")
+                    .append("</tr>");
+        }
+        body.append("</table>");
+    }
+
+    private void appendRegisterDetails(StringBuilder body, JsonNode root) {
+        boolean hasRegisterFields = root.has("owner")
+                || root.has("mortgages")
+                || root.has("seizures")
+                || root.has("violationBuilding");
+        if (!hasRegisterFields) {
+            return;
+        }
+        body.append("<h2>추출 정보</h2>");
+        body.append("<div class=\"meta\">");
+        if (root.has("owner")) {
+            body.append(row("소유자", escape(text(root, "owner"))));
+        }
+        if (root.has("ownerMatches")) {
+            body.append(row("소유자 일치", yesNo(root.get("ownerMatches"))));
+        }
+        if (root.has("addressMatches")) {
+            body.append(row("주소 일치", yesNo(root.get("addressMatches"))));
+        }
+        if (root.has("trust")) {
+            body.append(row("신탁 등기", yesNo(root.get("trust"))));
+        }
+        if (root.has("violationBuilding")) {
+            body.append(row("위반건축물", yesNo(root.get("violationBuilding"))));
+        }
+        body.append("</div>");
+
+        appendMortgages(body, root.get("mortgages"));
+        appendStringList(body, root.get("seizures"), "압류·가압류 등");
+    }
+
+    private void appendMortgages(StringBuilder body, JsonNode mortgages) {
+        if (mortgages == null || !mortgages.isArray() || mortgages.isEmpty()) {
+            return;
+        }
+        body.append("<h2>근저당권</h2>");
+        body.append("<table><tr><th>채권자</th><th>채권최고액</th><th>설정일</th></tr>");
+        for (JsonNode mortgage : mortgages) {
+            body.append("<tr>")
+                    .append("<td>").append(escape(text(mortgage, "creditor"))).append("</td>")
+                    .append("<td>").append(escape(text(mortgage, "maxClaim"))).append("</td>")
+                    .append("<td>").append(escape(text(mortgage, "date"))).append("</td>")
+                    .append("</tr>");
+        }
+        body.append("</table>");
+    }
+
+    private void appendReasons(StringBuilder body, JsonNode root) {
+        appendStringList(body, root.get("reasons"), "판정 근거");
+    }
+
+    private void appendStringList(StringBuilder body, JsonNode array, String title) {
+        if (array == null || !array.isArray() || array.isEmpty()) {
+            return;
+        }
+        body.append("<h2>").append(escape(title)).append("</h2><ul>");
+        for (JsonNode item : array) {
+            body.append("<li>").append(escape(item.asText(""))).append("</li>");
+        }
+        body.append("</ul>");
+    }
+
+    private JsonNode parse(String resultJson) {
+        if (resultJson == null || resultJson.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(resultJson);
+        } catch (Exception exception) {
+            log.warn("서류 분석 resultJson 파싱 실패 — 요약만 렌더링합니다.", exception);
+            return null;
+        }
+    }
+
+    private String riskBadge(String riskLevel) {
+        String label = nullToDash(riskLevel);
+        String cssClass = switch (label) {
+            case "위험" -> "risk-danger";
+            case "주의" -> "risk-caution";
+            case "안전" -> "risk-safe";
+            default -> "risk-none";
+        };
+        return "<span class=\"badge " + cssClass + "\">" + escape(label) + "</span>";
+    }
+
+    private String row(String label, String value) {
+        return "<div class=\"item\"><span class=\"label\">" + escape(label) + "</span>"
+                + value + "</div>";
+    }
+
+    private String text(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? "" : value.asText("");
+    }
+
+    private String yesNo(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "-";
+        }
+        return node.asBoolean(false) ? "예" : "아니오";
+    }
+
+    private String nullToDash(String value) {
+        return value == null || value.isBlank() ? "-" : value;
+    }
+
+    private String escape(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
+    }
+}

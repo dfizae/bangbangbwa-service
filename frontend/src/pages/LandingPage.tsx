@@ -10,15 +10,20 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
   CalendarCheck,
+  Camera,
   Check,
   CheckCircle2,
+  Circle,
   ClipboardCheck,
   Eye,
   FileText,
-  Image as ImageIcon,
   MapPin,
+  Mic,
+  PhoneOff,
   Play,
   ScanSearch,
+  Sparkles,
+  TriangleAlert,
   Video,
   type LucideIcon,
 } from "lucide-react";
@@ -183,6 +188,213 @@ function FlowStep({
   );
 }
 
+const CHECKLIST_PREVIEW = [
+  { label: "수압·배수 확인", status: "done" },
+  { label: "곰팡이·결로 흔적", status: "issue" },
+  { label: "채광·방음 상태", status: "done" },
+  { label: "옵션 가전 작동", status: "todo" },
+] as const;
+
+// 단계별 미리보기 — 예약(/booking) · 라이브 투어(WebRTC) · 체크리스트 ·
+// 리포트 화면을 카드 한 장 크기로 축약해 보여준다
+function FlowPreview({ step }: { step: number }) {
+  if (step === 0) {
+    return (
+      <>
+        <div className="flex items-center justify-between gap-3">
+          <strong className="text-[15px] font-semibold">
+            미팅 예약 — 역삼 래미안
+          </strong>
+          <Badge variant="secondary">온라인 투어</Badge>
+        </div>
+        <div className="mt-4 grid grid-cols-7 gap-1.5">
+          {Array.from({ length: 14 }, (_, i) => i + 8).map((day) => (
+            <span
+              key={day}
+              className={cn(
+                "grid h-8 place-items-center rounded-md text-xs font-medium",
+                day === 14
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {day}
+            </span>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {["10:00", "14:00", "16:00"].map((slot) => (
+            <span
+              key={slot}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium",
+                slot === "14:00"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "text-muted-foreground",
+              )}
+            >
+              {slot}
+            </span>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <CalendarCheck className="size-4 text-primary" />
+          <span className="text-sm font-medium">
+            14일 14:00 · 예약 요청 완료
+          </span>
+        </div>
+      </>
+    );
+  }
+
+  if (step === 1) {
+    return (
+      <>
+        <div className="flex items-center justify-between gap-3">
+          <strong className="text-[15px] font-semibold">
+            라이브 투어 — 역삼 래미안
+          </strong>
+          <Badge variant="secondary">1:1 통화</Badge>
+        </div>
+        <div className="relative mt-4 aspect-video overflow-hidden rounded-lg bg-slate-900">
+          <img
+            src="/hero-poster.webp"
+            alt=""
+            loading="lazy"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <span className="absolute top-2 left-2 inline-flex items-center gap-1.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+            <span className="size-1.5 rounded-full bg-white" />
+            LIVE
+          </span>
+          <span className="absolute right-2 bottom-2 grid h-14 w-10 place-items-center rounded-md border border-white/40 bg-slate-800 text-[10px] font-medium text-white/80">
+            나
+          </span>
+        </div>
+        <div className="mt-4 flex justify-center gap-3" aria-hidden="true">
+          <span className="grid size-9 place-items-center rounded-full bg-muted">
+            <Mic className="size-4" />
+          </span>
+          <span className="grid size-9 place-items-center rounded-full bg-muted">
+            <Video className="size-4" />
+          </span>
+          <span className="grid size-9 place-items-center rounded-full bg-red-600 text-white">
+            <PhoneOff className="size-4" />
+          </span>
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <Eye className="size-4 text-primary" />
+          <span className="text-sm font-medium">
+            중개사 화면을 실시간으로 보는 중
+          </span>
+        </div>
+      </>
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <>
+        <div className="flex items-center justify-between gap-3">
+          <strong className="text-[15px] font-semibold">
+            체크리스트 — 역삼 래미안
+          </strong>
+          <Badge variant="secondary">4개 항목</Badge>
+        </div>
+        <ul className="mt-4 space-y-2">
+          {CHECKLIST_PREVIEW.map(({ label, status }) => (
+            <li
+              key={label}
+              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+            >
+              {status === "done" && (
+                <CheckCircle2 className="size-4 shrink-0 text-primary" />
+              )}
+              {status === "issue" && (
+                <TriangleAlert className="size-4 shrink-0 text-amber-500" />
+              )}
+              {status === "todo" && (
+                <Circle className="size-4 shrink-0 text-muted-foreground" />
+              )}
+              <span
+                className={cn(
+                  "font-medium",
+                  status === "todo" && "text-muted-foreground",
+                )}
+              >
+                {label}
+              </span>
+              {status === "issue" && (
+                <span className="ml-auto text-[11px] font-medium text-amber-600">
+                  문제 발견
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 flex items-center gap-2">
+          <CheckCircle2 className="size-4 text-primary" />
+          <span className="text-sm font-medium">확인 완료 2 · 문제 발견 1</span>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <strong className="text-[15px] font-semibold">
+          AI 검수 리포트 — 역삼 래미안
+        </strong>
+        <Badge variant="secondary">자동 생성</Badge>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+        <p className="font-semibold">
+          <span className="text-primary">6개 확인</span>
+          <span className="mx-1.5 text-muted-foreground">/</span>
+          전체 7개
+        </p>
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Camera className="size-3.5" /> 사진 12장
+        </p>
+      </div>
+      <div
+        className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
+        aria-hidden="true"
+      >
+        <div className="h-full w-[86%] rounded-full bg-primary" />
+      </div>
+      <figure className="mt-4 overflow-hidden rounded-xl border bg-muted/20">
+        <img
+          src="/hero-poster.webp"
+          alt=""
+          loading="lazy"
+          className="aspect-video w-full object-cover"
+        />
+        <figcaption className="space-y-1.5 px-3 py-2.5">
+          <p className="flex gap-2 text-xs text-amber-700 dark:text-amber-300">
+            <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              <strong className="font-semibold">확인 필요</strong> · 욕실 벽
+              곰팡이 의심
+            </span>
+          </p>
+          <p className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 className="size-3.5 shrink-0" /> 주방·거실 발견된 이상
+            없음
+          </p>
+        </figcaption>
+      </figure>
+      <div className="mt-4 flex items-center gap-2">
+        <Sparkles className="size-4 text-primary" />
+        <span className="text-sm font-medium">
+          AI 점검 요약 · 하자 2건 기록됨
+        </span>
+      </div>
+    </>
+  );
+}
+
 // 커서를 올린 단계가 하이라이트되는 이용 흐름 섹션
 // (lg 이상은 단계 hover/focus 전환, 미만은 단계 버튼 탭 전환)
 function FlowSection() {
@@ -195,6 +407,7 @@ function FlowSection() {
   const [stepDirection, setStepDirection] = useState(1);
   const [hopMs, setHopMs] = useState(FLOW_STEP_HOP_MS);
   const [ActiveIcon, activeTitle, activeDescription] = FLOW_STEPS[targetStep];
+  const previewStep = isDesktop ? desktopStep : targetStep;
 
   const selectMobileStep = (index: number) => {
     setStepDirection(index >= targetStep ? 1 : -1);
@@ -229,8 +442,8 @@ function FlowSection() {
       className="border-y bg-muted/40 lg:h-[calc(100svh-3.5rem)]"
     >
       <div className="lg:flex lg:h-full lg:items-center">
-        <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 lg:max-w-5xl lg:px-8 lg:py-0">
-          <div className="mb-8">
+        <div className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 sm:py-16 lg:max-w-5xl lg:px-8 lg:py-0">
+          <div className="mb-6 sm:mb-8">
             <p className="text-sm font-bold tracking-wider text-primary">
               이용 흐름
             </p>
@@ -239,7 +452,7 @@ function FlowSection() {
             </h2>
           </div>
 
-          <div className="grid gap-16 lg:grid-cols-[1fr_340px]">
+          <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:gap-16">
             <ol className="hidden lg:flex lg:flex-col">
               {FLOW_STEPS.map(([Icon, title, description], index) => (
                 <FlowStep
@@ -366,32 +579,33 @@ function FlowSection() {
             </div>
 
             <div className="rounded-2xl border bg-card p-6 shadow-[0_16px_40px_-8px_rgba(22,93,252,0.15)] lg:flex lg:min-h-[calc(100svh-22rem)] lg:flex-col lg:justify-center">
-              <div className="flex items-center justify-between gap-3">
-                <strong className="text-[15px] font-semibold">
-                  AI 검수 리포트 — 역삼 래미안
-                </strong>
-                <Badge variant="secondary">자동 생성</Badge>
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="grid h-[72px] place-items-center rounded-md bg-muted lg:h-24"
-                  >
-                    <ImageIcon className="size-[18px] text-muted-foreground" />
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 space-y-2">
-                <div className="h-2.5 rounded-full bg-muted" />
-                <div className="h-2.5 rounded-full bg-muted" />
-                <div className="h-2.5 w-3/5 rounded-full bg-muted" />
-              </div>
-              <div className="mt-4 flex items-center gap-2">
-                <CheckCircle2 className="size-4 text-primary" />
-                <span className="text-sm font-medium">
-                  하자 2건 · 확인 요청 5건 기록됨
-                </span>
+              {/* 네 미리보기를 같은 셀에 겹쳐 두어 패널 높이를 가장 큰 단계
+                  기준으로 고정한다 — 전환 시 레이아웃이 흔들리지 않는다 */}
+              <div className="grid">
+                {FLOW_STEPS.map(([, title], index) => {
+                  const isCurrent = previewStep === index;
+                  return (
+                    <motion.div
+                      key={title}
+                      className={cn(
+                        "col-start-1 row-start-1 self-center",
+                        !isCurrent && "pointer-events-none",
+                      )}
+                      aria-hidden={!isCurrent || undefined}
+                      initial={false}
+                      animate={{
+                        opacity: isCurrent ? 1 : 0,
+                        y: reducedMotion ? 0 : isCurrent ? 0 : 10,
+                      }}
+                      transition={{
+                        duration: reducedMotion ? 0 : 0.22,
+                        ease: "easeOut",
+                      }}
+                    >
+                      <FlowPreview step={index} />
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -538,7 +752,7 @@ function FeatureVisual({ index }: { index: number }) {
 // (lg 이상은 커서 hover/focus, 미만은 카드 클릭으로 전환)
 function FeaturesSection() {
   const reducedMotion = useReducedMotion();
-  const [selected, setSelected] = useState(1);
+  const [selected, setSelected] = useState(0);
   const active = selected;
   const { icon: ActiveIcon, title, description } = FEATURES[active];
 
@@ -775,7 +989,6 @@ function getActiveSnapIndex() {
 
 function LandingPage() {
   const reducedMotion = useReducedMotion();
-  const isDesktop = useIsDesktop();
   // 요청 섹션의 투어 장면 확대 모달 (모바일 썸네일 전용)
   const [tourPhotoOpen, setTourPhotoOpen] = useState(false);
   const activeSnapIndex = useSyncExternalStore(
@@ -919,8 +1132,7 @@ function LandingPage() {
       >
         <div className="relative isolate h-full overflow-hidden bg-slate-900">
           <video
-            key={isDesktop ? "desktop" : "mobile"}
-            src={isDesktop ? "/hero-tour.mp4" : "/hero-tour-mobile.mp4"}
+            src="/hero-tour.mp4"
             poster="/hero-poster.webp"
             autoPlay
             muted
@@ -932,7 +1144,7 @@ function LandingPage() {
           {/* 영상 전체를 고르게 덮는 반투명 검정 오버레이 — 텍스트 대비 확보 */}
           <div className="absolute inset-0 bg-slate-950/60" />
 
-          {/* 모바일은 배지·제목을 정중앙에, 검색·둘러보기 버튼을 하단에 두고 설명·CTA 행은 lg부터 보인다 */}
+          {/* 모바일은 배지·제목·둘러보기 버튼을 정중앙에 두고, 검색과 설명·CTA 행은 lg부터 보인다 */}
           {/* 배경은 풀블리드지만 콘텐츠는 기존 폭으로 가운데 정렬 */}
           <div className="relative z-10 mx-auto grid h-full w-full max-w-[1180px] grid-rows-[1fr_auto] items-center justify-items-center gap-6 px-6 py-8 sm:p-9 lg:grid-cols-[1.15fr_.85fr] lg:grid-rows-1 lg:justify-items-stretch lg:gap-7 lg:p-10">
             <motion.div
@@ -947,17 +1159,34 @@ function LandingPage() {
               >
                 세입자와 중개사를 잇는 1:1 라이브 투어
               </motion.p>
-              <h1 className="text-[2.5rem] leading-[1.12] font-bold tracking-[-0.04em] sm:text-5xl lg:text-6xl">
-                <motion.span variants={HERO_RISE} className="block">
-                  방송으로 방을 봐
-                </motion.span>
-                <motion.span
-                  variants={HERO_RISE}
-                  className="block text-primary"
-                >
-                  방방봐
-                </motion.span>
-              </h1>
+              {/* w-fit 래퍼로 제목 글씨 폭만큼 줄여, 아래 모바일 버튼(w-full)이
+                  로고 폭과 같아지게 한다 */}
+              <div className="mx-auto w-fit lg:mx-0">
+                <h1 className="text-[2.5rem] leading-[1.12] font-bold tracking-[-0.04em] sm:text-5xl lg:text-6xl">
+                  <motion.span variants={HERO_RISE} className="block">
+                    방송으로 방을 봐
+                  </motion.span>
+                  <motion.span
+                    variants={HERO_RISE}
+                    className="block text-primary"
+                  >
+                    방방봐
+                  </motion.span>
+                </h1>
+                {/* lg 미만 전용 CTA — 검색창 대신 제목 바로 아래에서 전체 매물로 안내한다.
+                    w-full이 w-fit 래퍼를 따라가 "방송으로 방을 봐" 글씨 폭과 같아진다 */}
+                <motion.div variants={HERO_RISE} className="mt-7 lg:hidden">
+                  <Button
+                    size="lg"
+                    className="h-13 w-full rounded-full text-base"
+                    asChild
+                  >
+                    <Link to="/properties">
+                      <MapPin /> 매물 둘러보기 <ArrowRight />
+                    </Link>
+                  </Button>
+                </motion.div>
+              </div>
               <motion.p
                 variants={HERO_RISE}
                 className="mt-6 hidden max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg lg:block lg:text-xl"
@@ -989,18 +1218,9 @@ function LandingPage() {
               </motion.div>
             </motion.div>
 
-            <div className="mx-auto w-full max-w-md space-y-4">
+            {/* 검색은 데스크톱 전용 — 모바일에서는 제목 아래 버튼이 CTA를 맡는다 */}
+            <div className="mx-auto hidden w-full max-w-md lg:block">
               <HeroSearch />
-              {/* lg 미만 전용 — 숨겨진 데스크톱 CTA 대신 검색 아래에서 전체 매물로 안내한다 */}
-              <Button
-                size="lg"
-                className="h-13 w-full rounded-2xl text-base lg:hidden"
-                asChild
-              >
-                <Link to="/properties">
-                  <MapPin /> 매물 둘러보기 <ArrowRight />
-                </Link>
-              </Button>
             </div>
           </div>
         </div>

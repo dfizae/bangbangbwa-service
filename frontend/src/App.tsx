@@ -24,6 +24,7 @@ import ReservationPage from "@/pages/ReservationPage";
 import ReportDetailPage from "@/pages/ReportDetailPage";
 import BookingPage from "@/pages/BookingPage";
 import SavedPropertiesPage from "@/pages/SavedPropertiesPage";
+import SessionCaptureReviewPage from "@/pages/SessionCaptureReviewPage";
 import {
   useDeleteProperty,
   useIsMyProperty,
@@ -38,6 +39,35 @@ function AdminRoute() {
     <RequireAuth>
       {(user) =>
         user.role === "관리자" ? <AdminPage /> : <Navigate to="/" replace />
+      }
+    </RequireAuth>
+  );
+}
+
+// 매물 리포트는 세입자 전용 결과물이다. URL 직접 입력도 역할 가드에서 차단한다.
+function TenantReportRoute() {
+  return (
+    <RequireAuth>
+      {(user) =>
+        user.role === "세입자" ? (
+          <ReportDetailPage />
+        ) : (
+          <Navigate to="/mypage" replace />
+        )
+      }
+    </RequireAuth>
+  );
+}
+
+function TenantCaptureReviewRoute() {
+  return (
+    <RequireAuth>
+      {(user) =>
+        user.role === "세입자" ? (
+          <SessionCaptureReviewPage />
+        ) : (
+          <Navigate to="/reservations" replace />
+        )
       }
     </RequireAuth>
   );
@@ -109,9 +139,10 @@ function App() {
           path="/reservations"
           element={<RequireAuth>{() => <ReservationPage />}</RequireAuth>}
         />
+        <Route path="/reports/:reportId" element={<TenantReportRoute />} />
         <Route
-          path="/reports/:reportId"
-          element={<RequireAuth>{() => <ReportDetailPage />}</RequireAuth>}
+          path="/sessions/:sessionId/captures/review"
+          element={<TenantCaptureReviewRoute />}
         />
         <Route
           path="/booking/:id"

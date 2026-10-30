@@ -12,12 +12,12 @@ import {
   ChevronUp,
   ListChecks,
   Loader2,
-  LogOut,
   Mic,
   MicOff,
   PhoneOff,
   RotateCcw,
   ScanSearch,
+  SwitchCamera,
   Trash2,
   Users,
   Video,
@@ -47,7 +47,6 @@ import {
   useLiveSession,
   useUploadSessionCapture,
 } from "@/hooks/queries/sessionQueries";
-import { useCreateReport } from "@/hooks/queries/reportQueries";
 import {
   type SessionCapture,
   useSessionCaptures,
@@ -143,6 +142,9 @@ interface VideoTileProps {
   label: string;
   className: string;
   muted?: boolean;
+  // 전면 카메라 셀프뷰는 거울처럼 보여야 움직임이 자연스럽다.
+  // CSS 반전이라 송출 영상과 캡처(canvas)에는 영향이 없다
+  mirrored?: boolean;
   aspect?: number | null;
   notice?: ReactNode;
 }
@@ -152,6 +154,7 @@ function VideoTile({
   label,
   className,
   muted = false,
+  mirrored = false,
   aspect,
   notice,
 }: VideoTileProps) {
@@ -169,7 +172,7 @@ function VideoTile({
         autoPlay
         playsInline
         muted={muted}
-        className="size-full object-contain"
+        className={cn("size-full object-contain", mirrored && "-scale-x-100")}
       />
       {notice}
       <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-slate-950/70 px-2 py-0.5 text-xs font-medium text-white">
@@ -412,13 +415,20 @@ function ReservationLivePage() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  // 카메라 전환 시 재협상 없이 송출 트랙만 갈아끼우기 위한 현재 연결 참조
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  // 연결 effect(재시도 포함)가 최신 카메라 방향으로 스트림을 열기 위한 고정 참조
+  const facingRef = useRef<"user" | "environment">("user");
   const sessionEndedRef = useRef(false);
+  const uploadedCaptureIdsRef = useRef(new Set<string>());
 
   const [status, setStatus] = useState<SessionStatus>("connecting");
-  // 나가기 다이얼로그 분기용 — 상대가 세션에 남아 있으면 퇴장만, 혼자면 종료까지 제안한다
-  const [peerPresent, setPeerPresent] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [facing, setFacing] = useState<"user" | "environment">("user");
+  const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const [switchingCamera, setSwitchingCamera] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [mediaStatus, setMediaStatus] = useState<MediaStatus>("pending");
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -476,6 +486,8 @@ function ReservationLivePage() {
     videoRef: localVideoRef,
     label: isBroker ? "내 카메라 (송출 중)" : myLabel,
     muted: true,
+    // 후면 카메라는 현장을 비추므로 거울 모드 없이 실제 방향 그대로 보여준다
+    mirrored: facing === "user",
     aspect: localAspect,
     notice: <LocalTileNotice mediaStatus={mediaStatus} camOn={camOn} />,
   };
@@ -483,6 +495,9 @@ function ReservationLivePage() {
     videoRef: remoteVideoRef,
     label: peerLabel,
     muted: false,
+    // 세입자 화면은 중개인이 본인 셀프뷰(거울 모드)로 보는 방향과 일치하게 미러링한다.
+    // CSS 반전이라 캡처(canvas)는 원본 방향 그대로 저장된다
+    mirrored: !isBroker,
     aspect: remoteAspect,
     notice: <PeerPreparingNotice status={displayStatus} />,
   };
@@ -501,35 +516,41 @@ function ReservationLivePage() {
   const { captures, capture, removeCapture } = useSessionCaptures(
     primaryTile.videoRef,
   );
-  const { mutateAsync: createSessionReport, isPending: isSavingReport } =
-    useCreateReport();
   const { mutateAsync: endLiveSession, isPending: isEndingSession } =
     useEndSession(meetingId);
   const { mutateAsync: leaveLiveSession, isPending: isLeavingSession } =
     useLeaveSession(meetingId);
   const { mutateAsync: uploadCapture, isPending: isUploadingCapture } =
     useUploadSessionCapture();
-  const [reportError, setReportError] = useState<string | null>(null);
+  const [sessionActionError, setSessionActionError] = useState<string | null>(
+    null,
+  );
 
   // 진행 중에는 어느 버튼으로도 중복 요청이 나가지 않게 함께 잠근다
-  const isClosingSession =
-    isSavingReport || isEndingSession || isUploadingCapture;
+  const isClosingSession = isEndingSession || isUploadingCapture;
   const sessionActionPending = isClosingSession || isLeavingSession;
 
   // RTC-03 세션 퇴장 — 세션은 살려 둔 채 나만 나간다 (재입장 가능)
   const leaveMeeting = async () => {
     if (!session) {
-      setReportError(
+      setSessionActionError(
         "세션 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
       );
       return;
     }
 
-    setReportError(null);
+    // 상대가 세션을 종료하면 백엔드 회의 상태도 이미 완료되어 leave 요청이 거절된다.
+    // 중개사는 추가 요청 없이 화면만 정리해 예약 목록으로 돌아간다.
+    if (isBroker && status === "peer-left") {
+      navigate("/reservations", { replace: true });
+      return;
+    }
+
+    setSessionActionError(null);
     try {
       await leaveLiveSession(session.sessionId);
     } catch (error) {
-      setReportError(
+      setSessionActionError(
         `퇴장 요청 실패: ${isApiError(error) ? error.message : "잠시 후 다시 시도해 주세요."}`,
       );
       return;
@@ -539,57 +560,32 @@ function ReservationLivePage() {
 
   const endMeeting = async () => {
     if (!session) {
-      setReportError(
-        "리포트 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      setSessionActionError(
+        "세션 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
       );
       return;
     }
 
-    setReportError(null);
-    try {
-      await Promise.all(
-        captures.map(async (item) => {
-          const image = await fetch(item.url).then((response) =>
-            response.blob(),
-          );
-          const stored = await uploadCapture({
-            sessionId: session.sessionId,
-            image,
-          });
-          return stored;
-        }),
-      );
-    } catch (error) {
-      setReportError(
-        `현장 캡처 저장 실패: ${isApiError(error) ? error.message : "잠시 후 다시 시도해 주세요."}`,
-      );
-      return;
-    }
+    setSessionActionError(null);
 
     if (!sessionEndedRef.current) {
       try {
         await endLiveSession(session.sessionId);
         sessionEndedRef.current = true;
       } catch (error) {
-        setReportError(
+        setSessionActionError(
           `미팅 종료 요청 실패: ${isApiError(error) ? error.message : "잠시 후 다시 시도해 주세요."}`,
         );
         return;
       }
     }
 
-    try {
-      await createSessionReport(session.sessionId);
-      navigate("/mypage?section=reports", {
-        state: { reportSaved: true },
+    if (isBroker) {
+      navigate("/reservations", { replace: true });
+    } else {
+      navigate(`/sessions/${session.sessionId}/captures/review`, {
+        replace: true,
       });
-    } catch (error) {
-      const reportFailure = isApiError(error)
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : "잠시 후 다시 시도해 주세요.";
-      setReportError(`AI 리포트 생성 요청 실패: ${reportFailure}`);
     }
   };
 
@@ -600,14 +596,30 @@ function ReservationLivePage() {
     isBroker && status === "connected",
   );
 
-  // RTC-05 — 캡처는 영상 프레임이 있어야 가능하므로 실패를 사용자에게 알린다
+  // 사용자 캡처 API는 세입자 전용이다. 촬영 즉시 서버에 저장해야 세입자가 먼저
+  // 퇴장하고 중개사가 세션을 종료해도 이후 리포트에 사진이 남는다.
   const [captureError, captureAction, capturing] = useActionState<
     string | null
   >(async () => {
     const captured = await capture();
-    return captured
-      ? null
-      : "지금은 화면을 캡처할 수 없어요. 영상이 나온 뒤 다시 시도해 주세요.";
+    if (!captured) {
+      return "지금은 화면을 캡처할 수 없어요. 영상이 나온 뒤 다시 시도해 주세요.";
+    }
+    if (!session || isBroker) {
+      removeCapture(captured.id);
+      return "세입자만 현장 사진을 저장할 수 있어요.";
+    }
+    try {
+      await uploadCapture({
+        sessionId: session.sessionId,
+        image: captured.image,
+      });
+      uploadedCaptureIdsRef.current.add(captured.id);
+      return null;
+    } catch (error) {
+      removeCapture(captured.id);
+      return `현장 캡처 저장 실패: ${isApiError(error) ? error.message : "잠시 후 다시 시도해 주세요."}`;
+    }
   }, null);
 
   const deletePreviewCapture = () => {
@@ -647,6 +659,7 @@ function ReservationLivePage() {
 
       const next = new RTCPeerConnection({ iceServers: buildIceServers() });
       pc = next;
+      pcRef.current = next;
 
       if (localStream) {
         for (const track of localStream.getTracks()) {
@@ -692,9 +705,14 @@ function ReservationLivePage() {
     async function start() {
       try {
         // AI 하자 검수 입력(긴 변 960px)을 보장하려고 1080p를 요청한다.
-        // ideal이라 미지원 카메라는 가능한 최대 해상도로 열린다
+        // ideal이라 미지원 카메라는 가능한 최대 해상도로 열린다.
+        // facingMode도 소프트 제약이라 방향 구분이 없는 카메라(노트북 등)도 그대로 열린다
         localStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            facingMode: facingRef.current,
+          },
           audio: true,
         });
       } catch {
@@ -711,6 +729,22 @@ function ReservationLivePage() {
         localVideoRef.current.srcObject = localStream;
       }
 
+      // 카메라가 두 대 이상일 때만 전환 버튼을 노출한다.
+      // 시그널링 연결과 무관한 부가 기능이라 실패해도 입장 흐름을 막지 않는다
+      if (localStream) {
+        void navigator.mediaDevices
+          .enumerateDevices()
+          .then((devices) => {
+            if (!disposed) {
+              setHasMultipleCameras(
+                devices.filter((device) => device.kind === "videoinput")
+                  .length > 1,
+              );
+            }
+          })
+          .catch(() => setHasMultipleCameras(false));
+      }
+
       resetPeerConnection();
 
       // 접속 토큰(roomToken·accessToken)은 signalingUrl 쿼리에 이미 들어 있다
@@ -719,6 +753,14 @@ function ReservationLivePage() {
       ws.onerror = () => setStatus("error");
       ws.onclose = (event) => {
         if (disposed) {
+          return;
+        }
+        // end API가 성공하면 백엔드는 PEER_LEFT를 보내지 않고 WebSocket 방 전체를
+        // 정상 종료(1000)한다. 남아 있던 중개사에게 종료 안내를 먼저 보여준다.
+        if (event.code === 1000 && isBroker) {
+          setStatus("peer-left");
+          setSessionActionError(null);
+          setLeaveOpen(true);
           return;
         }
         // 정원 초과는 서버가 ERROR를 보낸 뒤 1008(Policy Violation)로 소켓을 닫는다.
@@ -736,7 +778,6 @@ function ReservationLivePage() {
           case "JOINED":
             // peerId가 없으면 내가 첫 입장. 상대가 이미 있으면 그쪽이
             // PEER_JOINED를 받고 오퍼를 보내오므로 여기서는 기다린다
-            setPeerPresent(message.peerId != null);
             if (message.peerId == null) {
               setStatus("waiting");
             }
@@ -744,7 +785,6 @@ function ReservationLivePage() {
           case "PEER_JOINED": {
             // 첫 입장이든 나갔던 상대의 재입장이든, 협상 이력이 없는
             // 새 연결에서 오퍼를 만들어야 ICE가 처음부터 다시 뚫린다
-            setPeerPresent(true);
             setStatus("connecting");
             const fresh = resetPeerConnection();
             await fresh.setLocalDescription();
@@ -752,8 +792,11 @@ function ReservationLivePage() {
             break;
           }
           case "PEER_LEFT":
-            setPeerPresent(false);
             setStatus("peer-left");
+            setSessionActionError(null);
+            if (isBroker) {
+              setLeaveOpen(true);
+            }
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = null;
             }
@@ -813,9 +856,10 @@ function ReservationLivePage() {
       localStream?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
       pc?.close();
+      pcRef.current = null;
       ws?.close();
     };
-  }, [signalingUrl]);
+  }, [isBroker, navigate, signalingUrl]);
 
   const toggleTrack = (kind: "audio" | "video", next: boolean) => {
     const tracks =
@@ -835,6 +879,84 @@ function ReservationLivePage() {
   const handleToggleCam = () => {
     toggleTrack("video", !camOn);
     setCamOn(!camOn);
+  };
+
+  // 전·후면 카메라 전환 — 연결은 유지한 채 송출 중인 비디오 트랙만 갈아끼운다.
+  // iOS 등은 카메라 두 대를 동시에 열 수 없어 기존 트랙을 먼저 멈춘 뒤 새 카메라를 연다
+  const handleSwitchCamera = async () => {
+    const stream = localStreamRef.current;
+    if (!stream || switchingCamera) {
+      return;
+    }
+    const next = facing === "user" ? "environment" : "user";
+    setSwitchingCamera(true);
+    setCameraError(null);
+
+    const [oldTrack] = stream.getVideoTracks();
+    oldTrack?.stop();
+
+    let newStream: MediaStream | null = null;
+    try {
+      newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          facingMode: { exact: next },
+        },
+      });
+    } catch {
+      // 반대 방향 카메라가 없거나 열 수 없으면 쓰던 카메라로 복구한다
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            facingMode: facing,
+          },
+        });
+        setCameraError(
+          next === "environment"
+            ? "후면 카메라를 열 수 없어 기존 카메라를 유지해요."
+            : "전면 카메라를 열 수 없어 기존 카메라를 유지해요.",
+        );
+      } catch {
+        setCameraError(
+          "카메라를 다시 열 수 없어요. 브라우저 권한을 확인한 뒤 다시 시도해 주세요.",
+        );
+      }
+    }
+
+    if (!newStream) {
+      setSwitchingCamera(false);
+      return;
+    }
+
+    const [newTrack] = newStream.getVideoTracks();
+    newTrack.enabled = camOn;
+
+    if (oldTrack) {
+      stream.removeTrack(oldTrack);
+    }
+    stream.addTrack(newTrack);
+
+    const sender = pcRef.current
+      ?.getSenders()
+      .find((s) => s.track?.kind === "video");
+    await sender?.replaceTrack(newTrack);
+
+    // 같은 스트림 객체지만 트랙 교체 후 미리보기가 멈추는 브라우저가 있어 다시 연결한다
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = stream;
+    }
+
+    // 복구로 기존 카메라가 다시 열렸을 수도 있으니 실제 열린 트랙 기준으로 방향을 맞춘다
+    const actualFacing =
+      newTrack.getSettings().facingMode === "environment"
+        ? "environment"
+        : "user";
+    facingRef.current = actualFacing;
+    setFacing(actualFacing);
+    setSwitchingCamera(false);
   };
 
   return (
@@ -887,6 +1009,7 @@ function ReservationLivePage() {
                 videoRef={primaryTile.videoRef}
                 label={primaryTile.label}
                 muted={primaryTile.muted}
+                mirrored={primaryTile.mirrored}
                 className="size-full"
                 notice={primaryTile.notice}
               />
@@ -894,6 +1017,7 @@ function ReservationLivePage() {
                 videoRef={secondaryTile.videoRef}
                 label={secondaryTile.label}
                 muted={secondaryTile.muted}
+                mirrored={secondaryTile.mirrored}
                 aspect={secondaryTile.aspect}
                 className="absolute top-2 right-2 w-24 border border-slate-700/70 shadow-sm sm:w-28 lg:top-3 lg:right-3 lg:w-40"
                 notice={secondaryTile.notice}
@@ -946,6 +1070,15 @@ function ReservationLivePage() {
               </p>
             )}
 
+            {cameraError && (
+              <p
+                role="alert"
+                className="mx-auto mb-2 w-fit rounded-md bg-slate-900/90 px-3 py-1.5 text-xs text-slate-200"
+              >
+                {cameraError}
+              </p>
+            )}
+
             <div className="flex items-center justify-center gap-2">
               <ControlButton
                 on={micOn}
@@ -963,23 +1096,42 @@ function ReservationLivePage() {
               >
                 {camOn ? <Video /> : <VideoOff />}
               </ControlButton>
-              {/* 캡처는 이 화면에서 유일한 primary — 남길 것을 남기는 동작이다 */}
-              <form action={captureAction} className="contents">
+              {hasMultipleCameras && (
                 <Button
-                  type="submit"
+                  type="button"
                   size="icon-lg"
-                  aria-label="화면 캡처"
-                  title="화면 캡처"
-                  disabled={capturing}
-                  className="rounded-full"
+                  aria-label="전면·후면 카메라 전환"
+                  title="전면·후면 카메라 전환"
+                  disabled={mediaBlocked || switchingCamera}
+                  onClick={() => void handleSwitchCamera()}
+                  className="rounded-full border border-slate-700 bg-slate-800 text-white hover:bg-slate-700"
                 >
-                  {capturing ? (
+                  {switchingCamera ? (
                     <Loader2 className="animate-spin" />
                   ) : (
-                    <Camera />
+                    <SwitchCamera />
                   )}
                 </Button>
-              </form>
+              )}
+              {!isBroker && (
+                // 캡처는 세입자 화면에서만 사용자 캡처 API로 즉시 저장한다.
+                <form action={captureAction} className="contents">
+                  <Button
+                    type="submit"
+                    size="icon-lg"
+                    aria-label="화면 캡처"
+                    title="화면 캡처"
+                    disabled={capturing}
+                    className="rounded-full"
+                  >
+                    {capturing ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Camera />
+                    )}
+                  </Button>
+                </form>
+              )}
               <Button
                 variant="destructive"
                 size="lg"
@@ -1061,31 +1213,32 @@ function ReservationLivePage() {
         </DialogContent>
       </Dialog>
 
-      {/* 상대가 남아 있으면 퇴장(leave)만 묻고, 혼자 남았으면 자리 비움(leave)과
-          미팅 종료(end) 중에서 고르게 한다 */}
+      {/* 중개사는 세션을 종료하지 않고 퇴장만 한다. 세입자가 미팅 종료를 선택해야
+          종료 후 검출 이미지 검토와 리포트 생성 흐름으로 이어진다. */}
       <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {peerPresent
-                ? "미팅에서 나가겠습니까?"
-                : "미팅을 종료하시겠습니까?"}
+              {isBroker && status === "peer-left"
+                ? "상대방이 미팅을 종료했습니다"
+                : isBroker
+                  ? "미팅에서 나가겠습니까?"
+                  : "미팅을 종료하시겠습니까?"}
             </DialogTitle>
             <DialogDescription>
-              {peerPresent
-                ? "나가면 통화가 끊기고 상대방은 세션에 남습니다. 세션이 끝나기 전에는 다시 입장할 수 있어요."
-                : "자리 비움을 누르면 세션을 유지한 채 나가서 다시 입장할 수 있고, 미팅 종료를 누르면 세션이 끝나고 캡처와 AI 리포트가 저장됩니다."}
+              {isBroker && status === "peer-left"
+                ? "통화가 종료되었습니다. 예약 목록으로 돌아갈 수 있습니다."
+                : isBroker
+                  ? "나가면 통화가 끊기고 상대방은 세션에 남습니다. 세션이 끝나기 전에는 다시 입장할 수 있어요."
+                  : "미팅을 종료하면 통화가 끝나고 저장된 캡처 사진을 확인할 수 있습니다."}
               {showPanel && " 체크리스트는 그대로 저장돼 있어요."}
-              {peerPresent &&
-                captures.length > 0 &&
-                ` 이번 세션에서 남긴 캡처 ${captures.length}장은 사라집니다.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            {reportError && (
+            {sessionActionError && (
               <div className="flex flex-col items-start gap-2">
                 <p role="alert" className="text-sm text-destructive">
-                  {reportError}
+                  {sessionActionError}
                 </p>
                 <Button
                   variant="outline"
@@ -1097,9 +1250,9 @@ function ReservationLivePage() {
               </div>
             )}
             <Button variant="outline" onClick={() => setLeaveOpen(false)}>
-              {peerPresent ? "아니요" : "취소"}
+              {isBroker ? "아니요" : "취소"}
             </Button>
-            {peerPresent ? (
+            {isBroker ? (
               <Button
                 variant="destructive"
                 disabled={sessionActionPending}
@@ -1110,35 +1263,25 @@ function ReservationLivePage() {
                 ) : (
                   <PhoneOff />
                 )}
-                {isLeavingSession ? "나가는 중..." : "예"}
+                {isLeavingSession
+                  ? "나가는 중..."
+                  : status === "peer-left"
+                    ? "예약 목록으로"
+                    : "예"}
               </Button>
             ) : (
-              <>
-                <Button
-                  variant="secondary"
-                  disabled={sessionActionPending}
-                  onClick={() => void leaveMeeting()}
-                >
-                  {isLeavingSession ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <LogOut />
-                  )}
-                  {isLeavingSession ? "나가는 중..." : "자리 비움"}
-                </Button>
-                <Button
-                  variant="destructive"
-                  disabled={sessionActionPending}
-                  onClick={() => void endMeeting()}
-                >
-                  {isClosingSession ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <PhoneOff />
-                  )}
-                  {isClosingSession ? "종료 처리 중..." : "미팅 종료"}
-                </Button>
-              </>
+              <Button
+                variant="destructive"
+                disabled={sessionActionPending}
+                onClick={() => void endMeeting()}
+              >
+                {isClosingSession ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <PhoneOff />
+                )}
+                {isClosingSession ? "종료 처리 중..." : "미팅 종료"}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

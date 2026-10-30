@@ -20,12 +20,17 @@ export interface ReportSummary {
   createdAt: string;
 }
 
+// bbox는 YOLO 형식의 0~1 정규화 좌표 (중심 x, 중심 y, 너비, 높이)
 export interface ReportDefect {
   defectId: number;
   type: "MOLD" | "WALLPAPER_DAMAGE";
   confidence: number;
   description: string;
   status: ReportStatus;
+  bboxXCenter?: number;
+  bboxYCenter?: number;
+  bboxWidth?: number;
+  bboxHeight?: number;
 }
 
 export interface ReportCapture {
@@ -65,8 +70,17 @@ export function getReport(reportId: number, signal?: AbortSignal) {
   });
 }
 
+export function deleteReport(reportId: number) {
+  return api.delete<void>({ path: `${REPORTS_PATH}/${reportId}/delete` });
+}
+
 export function getReportStatus(reportId: number) {
   return api.get<ReportStatusResponse>({
     path: `${REPORTS_PATH}/${reportId}/status`,
   });
+}
+
+// 인증이 필요한 바이너리 응답이라 envelope를 벗기지 않는 getBlob을 쓴다
+export function downloadReport(reportId: number) {
+  return api.getBlob({ path: `${REPORTS_PATH}/${reportId}/download` });
 }
