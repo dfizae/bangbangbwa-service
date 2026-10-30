@@ -323,7 +323,15 @@ public class PropertyController {
     }
 
     private Long extractUserId(Jwt jwt) {
-        return Long.valueOf(jwt.getSubject());
+        if (jwt == null || jwt.getSubject() == null) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
+        }
+
+        try {
+            return Long.valueOf(jwt.getSubject());
+        } catch (NumberFormatException exception) {
+            throw new CustomException(ErrorCode.INVALID_ACCESS_TOKEN);
+        }
     }
 
     private Long extractUserIdOrNull(Jwt jwt) {

@@ -1,5 +1,7 @@
 package com.backend.bangbangbwa.controller;
 
+import com.backend.bangbangbwa.common.exception.CustomException;
+import com.backend.bangbangbwa.common.exception.ErrorCode;
 import com.backend.bangbangbwa.common.response.ApiResponse;
 import com.backend.bangbangbwa.domain.meeting.dto.MeetingCreateRequest;
 import com.backend.bangbangbwa.domain.meeting.dto.MeetingPreferredTimesUpdateRequest;
@@ -318,6 +320,14 @@ public class MeetingController {
     }
 
     private Long extractUserId(Jwt jwt) {
-        return Long.valueOf(jwt.getSubject());
+        if (jwt == null || jwt.getSubject() == null) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
+        }
+
+        try {
+            return Long.valueOf(jwt.getSubject());
+        } catch (NumberFormatException exception) {
+            throw new CustomException(ErrorCode.INVALID_ACCESS_TOKEN);
+        }
     }
 }
