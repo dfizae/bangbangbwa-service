@@ -82,7 +82,21 @@
 | 라이브 투어 | WebRTC 실시간 화상, 체크리스트 기록, AI 하자 실시간 감지 배지 |
 | 리포트 | 체크리스트 + AI 하자 탐지 결과(캡처 이미지 · 하자 유형)를 담은 투어 리포트 |
 
-<!-- 랜딩 · 매물 목록 · 상세 · 체크리스트 · 리포트 스크린샷을 여기에 추가하세요 -->
+### 데스크톱
+
+| 랜딩 | 매물 지도 |
+| :---: | :---: |
+| <img src="public/screenshots/landing.jpg" alt="랜딩 페이지" /> | <img src="public/screenshots/properties.jpg" alt="매물 목록과 지도" /> |
+| **라이브 투어** | **마이페이지** |
+| <img src="public/screenshots/live-tour.jpg" alt="라이브 투어와 체크리스트" /> | <img src="public/screenshots/mypage.jpg" alt="중개사 마이페이지 내가 올린 매물" /> |
+
+### 모바일
+
+| 랜딩 | 매물 지도 | 라이브 투어 |
+| :---: | :---: | :---: |
+| <img src="public/screenshots/mobile-landing.jpg" alt="모바일 랜딩 페이지" width="240" /> | <img src="public/screenshots/mobile-properties.jpg" alt="모바일 매물 지도" width="240" /> | <img src="public/screenshots/mobile-live-tour.jpg" alt="모바일 라이브 투어" width="240" /> |
+
+<sub>※ 위 스크린샷의 매물 · 사용자 정보는 로컬 환경에 넣은 더미 데이터입니다.</sub>
 
 ## 🏗 시스템 아키텍처
 
